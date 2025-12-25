@@ -76,7 +76,7 @@ def test_return_subject(test_subject_1):
         city="Rome",
         nation="IT"
     )
-    return return_factory.next_return_from_year(year=2024, return_type="Solar")
+    return return_factory.next_return_from_date(2024, 1, 1, return_type="Solar")
 
 
 class TestSingleChartDataModel:
@@ -148,7 +148,10 @@ class TestDualChartDataModel:
 
     def test_synastry_chart_creation(self, factory, test_subject_1, test_subject_2):
         """Test creation of synastry chart data."""
-        chart_data = factory.create_chart_data("Synastry", test_subject_1, test_subject_2)
+        chart_data = factory.create_chart_data(
+            "Synastry", test_subject_1, test_subject_2,
+            include_relationship_score=True,
+        )
 
         # Verify model type
         assert isinstance(chart_data, DualChartDataModel)

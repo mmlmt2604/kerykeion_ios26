@@ -479,6 +479,9 @@ def draw_aspect_line(
     aspect: Union[AspectModel, dict],
     color: str,
     seventh_house_degree_ut: Union[int, float],
+    show_aspect_icon: bool = True,
+    rendered_icon_positions: Optional[list[tuple[float, float, int]]] = None,
+    icon_collision_threshold: float = 16.0,
 ) -> str:
     """Draws svg aspects: ring, aspect ring, degreeA degreeB
 
@@ -488,6 +491,10 @@ def draw_aspect_line(
         - aspect_dict (dict): The aspect dictionary.
         - color (str): The color of the aspect.
         - seventh_house_degree_ut (Union[int, float]): The degree of the seventh house.
+        - show_aspect_icon (bool): Whether to show the aspect icon at the center of the line.
+        - rendered_icon_positions (list | None): List to track rendered icon positions (x, y, aspect_degrees)
+            for collision detection. Only icons of the same aspect type will be checked for collision.
+        - icon_collision_threshold (float): Minimum distance in pixels between icons to avoid overlap.
 
     Returns:
         str: The SVG line element as a string.
@@ -504,9 +511,56 @@ def draw_aspect_line(
     x2 = sliceToX(0, ar, second_offset) + (r - ar)
     y2 = sliceToY(0, ar, second_offset) + (r - ar)
 
+    # Build the aspect icon SVG element if enabled
+    aspect_icon_svg = ""
+    if show_aspect_icon:
+        # Calculate icon position
+        if aspect["aspect_degrees"] == 0:
+            # For conjunctions, place on the same angle but at a slightly larger radius
+            # Use circular mean to handle wrap-around at 0°/360° correctly
+            p1_rad = math.radians(aspect["p1_abs_pos"])
+            p2_rad = math.radians(aspect["p2_abs_pos"])
+            avg_sin = (math.sin(p1_rad) + math.sin(p2_rad)) / 2
+            avg_cos = (math.cos(p1_rad) + math.cos(p2_rad)) / 2
+            avg_pos = math.degrees(math.atan2(avg_sin, avg_cos)) % 360
+            
+            offset = (int(seventh_house_degree_ut) / -1) + avg_pos
+            # Place at radius ar + 4 pixels outward
+            icon_radius = ar + 4
+            mid_x = sliceToX(0, icon_radius, offset) + (r - icon_radius)
+            mid_y = sliceToY(0, icon_radius, offset) + (r - icon_radius)
+        else:
+            # For other aspects, use the midpoint of the line
+            mid_x = (x1 + x2) / 2
+            mid_y = (y1 + y2) / 2
+
+        # Check for collision with previously rendered icons OF THE SAME ASPECT TYPE
+        # Different aspect types (e.g., opposition vs quincunx) are allowed to overlap
+        should_render_icon = True
+        current_aspect_degrees = aspect["aspect_degrees"]
+        if rendered_icon_positions is not None:
+            for existing_x, existing_y, existing_aspect_degrees in rendered_icon_positions:
+                # Only check collision for same aspect type
+                if existing_aspect_degrees == current_aspect_degrees:
+                    distance = math.sqrt((mid_x - existing_x) ** 2 + (mid_y - existing_y) ** 2)
+                    if distance < icon_collision_threshold:
+                        should_render_icon = False
+                        break
+
+        if should_render_icon:
+            # The aspect icon symbol ID is "orb" followed by the aspect degrees
+            aspect_symbol_id = f"orb{aspect['aspect_degrees']}"
+            # Center the icon (symbols are roughly 12x12, so offset by -6)
+            icon_offset = 6
+            aspect_icon_svg = f'<use x="{mid_x - icon_offset}" y="{mid_y - icon_offset}" xlink:href="#{aspect_symbol_id}" />'
+            # Track this position and aspect type for future collision detection
+            if rendered_icon_positions is not None:
+                rendered_icon_positions.append((mid_x, mid_y, current_aspect_degrees))
+
     return (
         f'<g kr:node="Aspect" kr:aspectname="{aspect["aspect"]}" kr:to="{aspect["p1_name"]}" kr:tooriginaldegrees="{aspect["p1_abs_pos"]}" kr:from="{aspect["p2_name"]}" kr:fromoriginaldegrees="{aspect["p2_abs_pos"]}" kr:orb="{aspect["orbit"]}" kr:aspectdegrees="{aspect["aspect_degrees"]}" kr:planetsdiff="{aspect["diff"]}" kr:aspectmovement="{aspect["aspect_movement"]}">'
         f'<line class="aspect" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" style="stroke: {color}; stroke-width: 1; stroke-opacity: .9;"/>'
+        f"{aspect_icon_svg}"
         f"</g>"
     )
 
@@ -1658,6 +1712,125 @@ def draw_single_house_comparison_grid(
     svg_output += "</g>"
 
     return svg_output
+
+
+def draw_cusp_comparison_grid(
+        house_comparison: "HouseComparisonModel",
+        celestial_point_language: "KerykeionLanguageCelestialPointModel",
+        *,
+        cusps_owner_subject_number: Literal[1, 2] = 1,
+        text_color: str = "var(--kerykeion-color-neutral-content)",
+        cusp_position_comparison_label: str = "Cusp Position Comparison",
+        owner_cusp_label: str = "Owner Cusp",
+        projected_house_label: str = "Projected House",
+        x_position: int = 1030,
+        y_position: int = 0,
+) -> str:
+    """
+    Generate SVG code for displaying house cusps and their positions in reciprocal houses.
+
+    Parameters:
+    - house_comparison (HouseComparisonModel): House comparison data
+    - celestial_point_language (KerykeionLanguageCelestialPointModel): Language settings
+    - cusps_owner_subject_number (int): Which subject's cusps to display (1 or 2)
+    - text_color (str): Color for text elements
+    - cusp_position_comparison_label (str): Label for the comparison section
+    - owner_cusp_label (str): Label for owner cusp column
+    - projected_house_label (str): Label for projected house column
+    - x_position (int): X position for the grid
+    - y_position (int): Y position for the grid
+
+    Returns:
+    - str: SVG representation of the cusp comparison grid
+    """
+    # Select the appropriate cusp data based on subject number
+    if cusps_owner_subject_number == 1:
+        cusps_data = house_comparison.first_cusps_in_second_houses
+        subject_name = house_comparison.first_subject_name
+    else:
+        cusps_data = house_comparison.second_cusps_in_first_houses
+        subject_name = house_comparison.second_subject_name
+
+    if not cusps_data:
+        return ""
+
+    svg_output = (
+        f'<g transform="translate({x_position},{y_position})">'
+        f'<text text-anchor="start" x="0" y="-15" style="fill:{text_color}; font-size: 12px; font-weight: bold;">{cusp_position_comparison_label}</text>'
+    )
+
+    # Add column headers with the same vertical spacing pattern as draw_house_comparison_grid
+    line_increment = 10
+    svg_output += (
+        f'<g transform="translate(0,{line_increment})">'
+        f'<text text-anchor="start" x="0" style="fill:{text_color}; font-weight: bold; font-size: 10px;">{owner_cusp_label}</text>'
+        f'<text text-anchor="start" x="70" style="fill:{text_color}; font-weight: bold; font-size: 10px;">{projected_house_label}</text>'
+        f'</g>'
+    )
+    line_increment += 15
+
+    # Derive a short cusp label (e.g. "Cusp", "Cuspide") from the owner column header.
+    cusp_cell_label = owner_cusp_label.split()[-1] if owner_cusp_label else "Cusp"
+
+    for cusp in cusps_data:
+        # Use numeric house identifiers to avoid exposing internal names like "First_House".
+        owner_house_number = cusp.point_owner_house_number or 0
+        owner_house_display = f"{cusp_cell_label} {owner_house_number}" if owner_house_number else "-"
+        projected_house_display = str(cusp.projected_house_number)
+
+        svg_output += (
+            f'<g transform="translate(0,{line_increment})">'
+            f'<text text-anchor="start" x="0" style="fill:{text_color}; font-size: 10px;">{owner_house_display}</text>'
+            f'<text text-anchor="start" x="70" style="fill:{text_color}; font-size: 10px;">{projected_house_display}</text>'
+            f'</g>'
+        )
+        line_increment += 12
+
+    svg_output += "</g>"
+
+    return svg_output
+
+
+def draw_single_cusp_comparison_grid(
+        house_comparison: "HouseComparisonModel",
+        celestial_point_language: "KerykeionLanguageCelestialPointModel",
+        *,
+        cusps_owner_subject_number: Literal[1, 2] = 1,
+        text_color: str = "var(--kerykeion-color-neutral-content)",
+        cusp_position_comparison_label: str = "Cusp Position Comparison",
+        owner_cusp_label: str = "Owner Cusp",
+        projected_house_label: str = "Projected House",
+        x_position: int = 1030,
+        y_position: int = 0,
+) -> str:
+    """
+    Generate SVG code for displaying house cusps and their positions in reciprocal houses (single grid).
+
+    Parameters:
+    - house_comparison (HouseComparisonModel): House comparison data
+    - celestial_point_language (KerykeionLanguageCelestialPointModel): Language settings
+    - cusps_owner_subject_number (int): Which subject's cusps to display (1 or 2)
+    - text_color (str): Color for text elements
+    - cusp_position_comparison_label (str): Label for the comparison section
+    - owner_cusp_label (str): Label for owner cusp column
+    - projected_house_label (str): Label for projected house column
+    - x_position (int): X position for the grid
+    - y_position (int): Y position for the grid
+
+    Returns:
+    - str: SVG representation of the cusp comparison grid
+    """
+    return draw_cusp_comparison_grid(
+        house_comparison=house_comparison,
+        celestial_point_language=celestial_point_language,
+        cusps_owner_subject_number=cusps_owner_subject_number,
+        text_color=text_color,
+        cusp_position_comparison_label=cusp_position_comparison_label,
+        owner_cusp_label=owner_cusp_label,
+        projected_house_label=projected_house_label,
+        x_position=x_position,
+        y_position=y_position,
+    )
 
 
 def makeLunarPhase(degrees_between_sun_and_moon: float, latitude: float) -> str:

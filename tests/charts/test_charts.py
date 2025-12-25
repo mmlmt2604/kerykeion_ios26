@@ -128,8 +128,36 @@ class TestCharts:
         synastry_chart_svg = ChartDrawer(
             chart_data,
             show_house_position_comparison=False,
+            show_cusp_position_comparison=False,
         ).generate_svg_string()
         self._compare_chart_svg("John Lennon - Synastry Chart - No House Comparison.svg", synastry_chart_svg)
+
+    def test_synastry_chart_with_house_comparison_only(self):
+        chart_data = ChartDataFactory.create_synastry_chart_data(self.first_subject, self.second_subject)
+        synastry_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=False,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Synastry Chart - House Comparison Only.svg", synastry_chart_svg)
+
+    def test_synastry_chart_with_cusp_comparison_only(self):
+        chart_data = ChartDataFactory.create_synastry_chart_data(self.first_subject, self.second_subject)
+        synastry_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=False,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Synastry Chart - Cusp Comparison Only.svg", synastry_chart_svg)
+
+    def test_synastry_chart_with_house_and_cusp_comparison(self):
+        chart_data = ChartDataFactory.create_synastry_chart_data(self.first_subject, self.second_subject)
+        synastry_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Synastry Chart - House and Cusp Comparison.svg", synastry_chart_svg)
 
     def test_transit_chart(self):
         chart_data = ChartDataFactory.create_transit_chart_data(self.first_subject, self.second_subject)
@@ -157,8 +185,36 @@ class TestCharts:
         transit_chart_svg = ChartDrawer(
             chart_data,
             show_house_position_comparison=False,
+            show_cusp_position_comparison=False,
         ).generate_svg_string()
         self._compare_chart_svg("John Lennon - Transit Chart - No House Comparison.svg", transit_chart_svg)
+
+    def test_transit_chart_with_house_comparison_only(self):
+        chart_data = ChartDataFactory.create_transit_chart_data(self.first_subject, self.second_subject)
+        transit_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=False,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Transit Chart - House Comparison Only.svg", transit_chart_svg)
+
+    def test_transit_chart_with_cusp_comparison_only(self):
+        chart_data = ChartDataFactory.create_transit_chart_data(self.first_subject, self.second_subject)
+        transit_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=False,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Transit Chart - Cusp Comparison Only.svg", transit_chart_svg)
+
+    def test_transit_chart_with_house_and_cusp_comparison(self):
+        chart_data = ChartDataFactory.create_transit_chart_data(self.first_subject, self.second_subject)
+        transit_chart_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg("John Lennon - Transit Chart - House and Cusp Comparison.svg", transit_chart_svg)
 
     def test_external_natal_chart(self):
         external_natal_subject = AstrologicalSubjectFactory.from_birth_data("John Lennon - ExternalNatal", 1940, 10, 9, 18, 30, "Liverpool", "GB", suppress_geonames_warning=True)
@@ -794,6 +850,36 @@ class TestCharts:
             dual_return_chart_no_house_svg,
         )
 
+        dual_return_chart_house_only_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=False,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Solar Return - House Comparison Only.svg",
+            dual_return_chart_house_only_svg,
+        )
+
+        dual_return_chart_cusp_only_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=False,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Solar Return - Cusp Comparison Only.svg",
+            dual_return_chart_cusp_only_svg,
+        )
+
+        dual_return_chart_house_and_cusp_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Solar Return - House and Cusp Comparison.svg",
+            dual_return_chart_house_and_cusp_svg,
+        )
+
     def test_black_and_white_dual_return_chart(self):
         return_factory = PlanetaryReturnFactory(
             self.first_subject,
@@ -889,6 +975,36 @@ class TestCharts:
         self._compare_chart_svg(
             "John Lennon - DualReturnChart Chart - Lunar Return - No House Comparison.svg",
             dual_return_chart_no_house_svg,
+        )
+
+        dual_return_chart_house_only_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=False,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Lunar Return - House Comparison Only.svg",
+            dual_return_chart_house_only_svg,
+        )
+
+        dual_return_chart_cusp_only_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=False,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Lunar Return - Cusp Comparison Only.svg",
+            dual_return_chart_cusp_only_svg,
+        )
+
+        dual_return_chart_house_and_cusp_svg = ChartDrawer(
+            chart_data,
+            show_house_position_comparison=True,
+            show_cusp_position_comparison=True,
+        ).generate_svg_string()
+        self._compare_chart_svg(
+            "John Lennon - DualReturnChart Chart - Lunar Return - House and Cusp Comparison.svg",
+            dual_return_chart_house_and_cusp_svg,
         )
 
     def test_single_return_lunar_chart(self):

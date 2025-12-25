@@ -132,6 +132,8 @@ class AspectsFactory:
         active_points: Optional[List[AstrologicalPoint]] = None,
         active_aspects: Optional[List[ActiveAspect]] = None,
         axis_orb_limit: Optional[float] = None,
+        first_subject_is_fixed: bool = False,
+        second_subject_is_fixed: bool = False,
     ) -> DualChartAspectsModel:
         """
         Create aspects analysis between two astrological charts.
@@ -193,6 +195,8 @@ class AspectsFactory:
             aspects_settings,
             axis_orb_limit,
             celestial_points,
+            first_subject_is_fixed=first_subject_is_fixed,
+            second_subject_is_fixed=second_subject_is_fixed,
         )
 
     @staticmethod
@@ -234,7 +238,9 @@ class AspectsFactory:
         active_aspects_resolved: List[ActiveAspect],
         aspects_settings: List[dict],
         axis_orb_limit: Optional[float],
-        celestial_points: List[dict]
+        celestial_points: List[dict],
+        first_subject_is_fixed: bool,
+        second_subject_is_fixed: bool,
     ) -> DualChartAspectsModel:
         """
         Create the complete dual chart aspects model with all calculations.
@@ -253,7 +259,9 @@ class AspectsFactory:
         """
         all_aspects = AspectsFactory._calculate_dual_chart_aspects(
             first_subject, second_subject, active_points_resolved, active_aspects_resolved,
-            aspects_settings, celestial_points
+            aspects_settings, celestial_points,
+            first_subject_is_fixed=first_subject_is_fixed,
+            second_subject_is_fixed=second_subject_is_fixed,
         )
         filtered_aspects = AspectsFactory._filter_relevant_aspects(
             all_aspects,
@@ -330,17 +338,17 @@ class AspectsFactory:
                     first_planet_id = planet_id_lookup.get(first_name, 0)
                     second_planet_id = planet_id_lookup.get(second_name, 0)
 
+                    # Get speeds first, fall back to 0.0 only if missing/None
+                    first_speed = active_points_list[first].get("speed") or 0.0
+                    second_speed = active_points_list[second].get("speed") or 0.0
+
                     # Determine aspect movement.
                     # If both points are chart axes, there is no meaningful
                     # dynamic movement between them, so we mark the aspect as
-                    # "Fixed" regardless of any synthetic speeds.
+                    # "Static" regardless of any synthetic speeds.
                     if first_name in AXES_LIST and second_name in AXES_LIST:
-                        aspect_movement = "Fixed"
+                        aspect_movement = "Static"
                     else:
-                        # Get speeds, fall back to 0.0 only if missing/None
-                        first_speed = active_points_list[first].get("speed") or 0.0
-                        second_speed = active_points_list[second].get("speed") or 0.0
-
                         # Calculate aspect movement (applying/separating/fixed)
                         aspect_movement = calculate_aspect_movement(
                             active_points_list[first]["abs_pos"],
@@ -364,6 +372,8 @@ class AspectsFactory:
                         p1=first_planet_id,
                         p2=second_planet_id,
                         aspect_movement=aspect_movement,
+                        p1_speed=first_speed,
+                        p2_speed=second_speed,
                     )
                     all_aspects_list.append(aspect_model)
 
@@ -376,7 +386,9 @@ class AspectsFactory:
         active_points: List[AstrologicalPoint],
         active_aspects: List[ActiveAspect],
         aspects_settings: List[dict],
-        celestial_points: List[dict]
+        celestial_points: List[dict],
+        first_subject_is_fixed: bool,
+        second_subject_is_fixed: bool,
     ) -> List[AspectModel]:
         """
         Calculate all aspects between two charts.
@@ -427,13 +439,19 @@ class AspectsFactory:
 
                     # For aspects between axes (ASC, MC, DSC, IC) in different charts
                     # there is no meaningful dynamic movement between two house systems,
-                    # so we mark the movement as "Fixed".
+                    # so we mark the movement as "Static".
                     if first_name in AXES_LIST and second_name in AXES_LIST:
-                        aspect_movement = "Fixed"
+                        aspect_movement = "Static"
                     else:
                         # Get speeds, fall back to 0.0 only if missing/None
                         first_speed = first_active_points_list[first].get("speed") or 0.0
                         second_speed = second_active_points_list[second].get("speed") or 0.0
+
+                        # Override speeds if subjects are fixed
+                        if first_subject_is_fixed:
+                            first_speed = 0.0
+                        if second_subject_is_fixed:
+                            second_speed = 0.0
 
                         # Calculate aspect movement (applying/separating/fixed)
                         aspect_movement = calculate_aspect_movement(
@@ -458,6 +476,8 @@ class AspectsFactory:
                         p1=first_planet_id,
                         p2=second_planet_id,
                         aspect_movement=aspect_movement,
+                        p1_speed=first_speed,
+                        p2_speed=second_speed,
                     )
                     all_aspects_list.append(aspect_model)
 

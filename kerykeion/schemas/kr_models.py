@@ -298,9 +298,11 @@ class AspectModel(SubscriptableBaseModel):
     diff: float
     p1: int
     p2: int
+    p1_speed: float = Field(default=0.0, description="Speed of the first point")
+    p2_speed: float = Field(default=0.0, description="Speed of the second point")
     aspect_movement: AspectMovementType = Field(
         description="Indicates whether the aspect is applying (orb decreasing), "
-                    "separating (orb increasing), or fixed (no relative motion)."
+                    "separating (orb increasing), or static (no relative motion)."
     )
 
 
@@ -319,11 +321,20 @@ class RelationshipScoreAspectModel(SubscriptableBaseModel):
     orbit: float
 
 
+class ScoreBreakdownItemModel(SubscriptableBaseModel):
+    """Single breakdown item explaining how points were earned."""
+    rule: str = Field(description="Rule identifier (e.g., 'destiny_sign', 'sun_sun_major')")
+    description: str = Field(description="Human-readable description of the rule")
+    points: int = Field(description="Points awarded for this rule")
+    details: Optional[str] = Field(default=None, description="Optional details (e.g., 'orbit: 1.5°')")
+
+
 class RelationshipScoreModel(SubscriptableBaseModel):
     score_value: int
     score_description: RelationshipScoreDescription
     is_destiny_sign: bool
     aspects: List[RelationshipScoreAspectModel]
+    score_breakdown: List[ScoreBreakdownItemModel] = Field(default_factory=list, description="Detailed breakdown of how the score was calculated")
     subjects: List[AstrologicalSubjectModel]
 
 
@@ -460,6 +471,10 @@ class HouseComparisonModel(SubscriptableBaseModel):
     """First subject's points positioned in second subject's houses"""
     second_points_in_first_houses: List[PointInHouseModel]
     """Second subject's points positioned in first subject's houses"""
+    first_cusps_in_second_houses: List[PointInHouseModel] = Field(default_factory=list)
+    """First subject's house cusps positioned in second subject's houses"""
+    second_cusps_in_first_houses: List[PointInHouseModel] = Field(default_factory=list)
+    """Second subject's house cusps positioned in first subject's houses"""
 
 
 class ElementDistributionModel(SubscriptableBaseModel):

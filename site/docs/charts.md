@@ -1,3 +1,9 @@
+---
+title: 'Charts Module - ChartDrawer'
+tags: ['docs', 'charts', 'svg', 'visual', 'kerykeion']
+order: 3
+---
+
 # Charts Module - ChartDrawer
 
 ## Overview
@@ -10,12 +16,12 @@ The SVG output ensures scalable, high-quality graphics that maintain clarity at 
 
 ## Core Features
 
-- **Chart Types**: Natal, Transit, Synastry, Composite
+- **Chart Types**: Natal, Transit, Synastry, Composite, Return (Sigle and Dual Wheels)
 - **Pre-computed Data**: Requires `ChartDataModel` from `ChartDataFactory`
 - **Output Methods**: Full chart, wheel-only, aspect grid-only
 - **Themes**: classic, dark, light, strawberry, dark-high-contrast, black-and-white
 - **Languages**: EN, IT, FR, ES, PT, CN, RU, TR, DE, HI
-- **Customization**: Themes, languages, transparency, minification
+- **Customization**: Themes, languages, transparency, minification, aspect-line icons (`show_aspect_icons`, default `True`)
 - **Output Formats**: Standard SVG, minified SVG, template strings
 
 ## Basic Usage
@@ -190,10 +196,10 @@ svg_content = chart_drawer.generate_svg_string()
 ## Output Methods
 
 ⚠️ **IMPORTANT DISTINCTION**: 
-- `makeSVG()` methods **save files** to the location specified in the constructor
-- `makeTemplate()` methods **return string content** without saving files
+- `save_*svg*` methods **save files** to the location specified in the call
+- `generate_*svg_string` methods **return string content** without saving files
 
-The ChartDrawer class offers two categories of output methods: file generation and template string generation.
+The `ChartDrawer` class offers two categories of output methods: file generation and template string generation.
 
 ### Full Chart with Aspects
 
@@ -213,7 +219,7 @@ subject = AstrologicalSubjectFactory.from_birth_data(
 chart_data = ChartDataFactory.create_natal_chart_data(subject)
 
 # Step 2: Create chart drawer
-chart_drawer = ChartDrawer(chart_data=chart_data)
+chart_drawer = ChartDrawer(chart_data=chart_data)  # show_aspect_icons=True by default
 
 output_dir = Path("charts_output")
 output_dir.mkdir(exist_ok=True)

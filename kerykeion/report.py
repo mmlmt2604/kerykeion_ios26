@@ -34,6 +34,7 @@ ASPECT_SYMBOLS = {
 MOVEMENT_SYMBOLS = {
     "Applying": "→",
     "Separating": "←",
+    "Static": "=",
 }
 
 
@@ -256,7 +257,7 @@ class ReportGenerator:
             else:
                 base_title = f"{self._primary_subject.name} — Lunar Return {year or ''}".strip()
         elif self.chart_type == "Transit":
-            date_str = self._format_date(
+            date_str = self._format_date_iso(
                 self._secondary_subject.iso_formatted_local_datetime if self._secondary_subject else None
             )
             base_title = f"{self._primary_subject.name} — Transit {date_str}".strip()
@@ -574,6 +575,23 @@ class ReportGenerator:
             )
         )
 
+        # Add cusp comparison sections
+        if comparison.first_cusps_in_second_houses:
+            sections.append(
+                self._render_cusp_in_house_table(
+                    comparison.first_cusps_in_second_houses,
+                    f"{comparison.first_subject_name} cusps in {comparison.second_subject_name} houses",
+                )
+            )
+
+        if comparison.second_cusps_in_first_houses:
+            sections.append(
+                self._render_cusp_in_house_table(
+                    comparison.second_cusps_in_first_houses,
+                    f"{comparison.second_subject_name} cusps in {comparison.first_subject_name} houses",
+                )
+            )
+
         return "\n\n".join(section for section in sections if section)
 
     def _render_point_in_house_table(self, points: Sequence[PointInHouseModel], title: str) -> str:
@@ -590,6 +608,22 @@ class ReportGenerator:
             table_data.append([
                 f"{point.point_owner_name} – {point.point_name.replace('_', ' ')}",
                 owner_house,
+                projected_house,
+                point.point_sign,
+                f"{point.point_degree:.2f}°",
+            ])
+
+        return AsciiTable(table_data, title=title).table
+
+    def _render_cusp_in_house_table(self, points: Sequence[PointInHouseModel], title: str) -> str:
+        if not points:
+            return ""
+
+        table_data: List[List[str]] = [["Point", "Projected House", "Sign", "Degree"]]
+        for point in points:
+            projected_house = f"{point.projected_house_number} ({point.projected_house_name})"
+            table_data.append([
+                f"{point.point_owner_name} – {point.point_name.replace('_', ' ')}",
                 projected_house,
                 point.point_sign,
                 f"{point.point_degree:.2f}°",
@@ -642,10 +676,30 @@ class ReportGenerator:
 
     @staticmethod
     def _format_date(iso_datetime: Optional[str]) -> str:
+        """
+        Format datetime in dd/mm/yyyy format.
+
+        .. deprecated::
+            Use _format_date_iso() for internationally unambiguous date formatting.
+        """
         if not iso_datetime:
             return ""
         try:
             return datetime.fromisoformat(iso_datetime).strftime("%d/%m/%Y")
+        except ValueError:
+            return iso_datetime
+
+    @staticmethod
+    def _format_date_iso(iso_datetime: Optional[str]) -> str:
+        """
+        Format datetime in ISO 8601 format (YYYY-MM-DD).
+
+        This format is internationally unambiguous and follows the ISO 8601 standard.
+        """
+        if not iso_datetime:
+            return ""
+        try:
+            return datetime.fromisoformat(iso_datetime).strftime("%Y-%m-%d")
         except ValueError:
             return iso_datetime
 

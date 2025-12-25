@@ -16,6 +16,9 @@ def draw_planets(
     chart_type: ChartType,
     second_subject_available_kerykeion_celestial_points: Union[list[KerykeionPointModel], None] = None,
     external_view: bool = False,
+    first_circle_radius: Union[int, float, None] = None,
+    second_circle_radius: Union[int, float, None] = None,
+    show_degree_indicators: bool = True,
 ) -> str:
     """
     Draws the planets on an astrological chart based on the provided parameters.
@@ -68,7 +71,7 @@ def draw_planets(
     # Extract absolute and relative positions for secondary celestial points if needed
     secondary_points_abs_positions = []
     secondary_points_rel_positions = []
-    if chart_type == "Transit" or chart_type == "Synastry" or chart_type == "Return":
+    if chart_type in ("Transit", "Synastry", "Return", "DualReturnChart"):
         if second_subject_available_kerykeion_celestial_points is not None:
             secondary_points_abs_positions = [
                 planet.abs_pos for planet in second_subject_available_kerykeion_celestial_points
@@ -192,11 +195,7 @@ def draw_planets(
 
         # Determine scale factor based on chart type
         scale_factor = 1.0
-        if chart_type == "Transit":
-            scale_factor = 0.8
-        elif chart_type == "Synastry":
-            scale_factor = 0.8
-        elif chart_type == "Return":
+        if chart_type in ("Transit", "Synastry", "Return", "DualReturnChart"):
             scale_factor = 0.8
         elif external_view:
             scale_factor = 0.8
@@ -220,21 +219,53 @@ def draw_planets(
         )
 
     # -----------------------------------------------------------
-    # 6. Draw transit/secondary celestial points
+    # 6. Draw degree indicators for single charts or transit/secondary points for dual charts
     # -----------------------------------------------------------
-    if chart_type == "Transit" or chart_type == "Synastry" or chart_type == "Return":
-        output = _draw_secondary_points(
-            output,
-            radius,
-            main_subject_first_house_degree_ut,
-            main_subject_seventh_house_degree_ut,
-            secondary_points_abs_positions,
-            secondary_points_rel_positions,
-            available_planets_setting,
-            chart_type,
-            TRANSIT_RING_EXCLUDE_POINTS_NAMES,
-            adjusted_offset,
-        )
+    if chart_type in ("Natal", "Composite", "SingleReturnChart"):
+        # Draw degree indicators for single charts (if first_circle_radius is provided)
+        # Skip when external_view is enabled (external view has its own connecting lines)
+        if show_degree_indicators and first_circle_radius is not None and not external_view:
+            main_points_rel_positions = [planet.position for planet in available_kerykeion_celestial_points]
+            output = _draw_primary_point_indicators(
+                output=output,
+                radius=radius,
+                first_circle_radius=first_circle_radius,
+                third_circle_radius=third_circle_radius,
+                first_house_degree=main_subject_first_house_degree_ut,
+                seventh_house_degree=main_subject_seventh_house_degree_ut,
+                points_abs_positions=main_points_abs_positions,
+                points_rel_positions=[p.position for p in available_kerykeion_celestial_points],
+                points_settings=available_planets_setting,
+            )
+    elif chart_type in ("Transit", "Synastry", "Return", "DualReturnChart"):
+        # Draw degree indicators if enabled
+        if show_degree_indicators:
+            # Draw degree indicators for secondary/outer planets
+            if secondary_points_abs_positions and secondary_points_rel_positions:
+                output = _draw_secondary_points(
+                    output,
+                    radius,
+                    main_subject_first_house_degree_ut,
+                    main_subject_seventh_house_degree_ut,
+                    secondary_points_abs_positions,
+                    secondary_points_rel_positions,
+                    available_planets_setting,
+                    chart_type,
+                    TRANSIT_RING_EXCLUDE_POINTS_NAMES,
+                    adjusted_offset,
+                )
+            # Draw degree indicators for primary/inner planets
+            main_points_rel_positions = [planet.position for planet in available_kerykeion_celestial_points]
+            output = _draw_inner_point_indicators(
+                output=output,
+                radius=radius,
+                third_circle_radius=third_circle_radius,
+                first_house_degree=main_subject_first_house_degree_ut,
+                seventh_house_degree=main_subject_seventh_house_degree_ut,
+                points_abs_positions=main_points_abs_positions,
+                points_rel_positions=main_points_rel_positions,
+                points_settings=available_planets_setting,
+            )
 
     return output
 
@@ -362,7 +393,7 @@ def _determine_point_radius(
             return 76
         else:
             return 110 if is_alternate_position else 130
-    elif chart_type == "Return":
+    elif chart_type in ("Return", "DualReturnChart"):
         if is_chart_angle:
             return 76
         else:
@@ -465,6 +496,301 @@ def _generate_point_svg(point_details: KerykeionPointModel, x: float, y: float, 
     svg += "</g>"
     return svg
 
+
+def _draw_primary_point_indicators(
+    output: str,
+    radius: Union[int, float],
+    first_circle_radius: Union[int, float],
+    third_circle_radius: Union[int, float],
+    first_house_degree: Union[int, float],
+    seventh_house_degree: Union[int, float],
+    points_abs_positions: list[Union[int, float]],
+    points_rel_positions: list[Union[int, float]],
+    points_settings: list[KerykeionSettingsCelestialPointModel],
+) -> str:
+    """
+    Draw degree indicators (radial line + rotated degree text) for primary celestial points
+    in single-subject charts (Natal, Composite, SingleReturnChart).
+
+    Args:
+        output (str): Current SVG output to append to.
+        radius (Union[int, float]): Chart radius.
+        first_circle_radius (Union[int, float]): Radius of the first circle (outer zodiac ring).
+        third_circle_radius (Union[int, float]): Radius of the third circle (inner boundary).
+        first_house_degree (Union[int, float]): Degree of the first house.
+        seventh_house_degree (Union[int, float]): Degree of the seventh house.
+        points_abs_positions (list[Union[int, float]]): Absolute positions of points.
+        points_rel_positions (list[Union[int, float]]): Relative positions of points (within sign).
+        points_settings (list[KerykeionSettingsCelestialPointModel]): Settings for points.
+
+    Returns:
+        str: Updated SVG output with added degree indicators.
+    """
+    # -----------------------------------------------------------
+    # 1. Calculate position adjustments for close points
+    # -----------------------------------------------------------
+    position_adjustments: dict[int, float] = {i: 0.0 for i in range(len(points_settings))}
+
+    # Map absolute position to point index
+    position_index_map = {}
+    for i in range(len(points_settings)):
+        position_index_map[points_abs_positions[i]] = i
+
+    # Sort positions
+    sorted_positions = sorted(position_index_map.keys())
+
+    # Find groups of points that are close to each other
+    point_groups: List[List[int]] = []
+    in_group = False
+
+    for pos_idx, abs_position in enumerate(sorted_positions):
+        point_a_idx = position_index_map[abs_position]
+
+        # Get next point
+        if pos_idx == len(sorted_positions) - 1:
+            point_b_idx = position_index_map[sorted_positions[0]]
+        else:
+            point_b_idx = position_index_map[sorted_positions[pos_idx + 1]]
+
+        # Check distance between points
+        position_a = points_abs_positions[point_a_idx]
+        position_b = points_abs_positions[point_b_idx]
+        distance = degreeDiff(position_a, position_b)
+
+        # Group points that are close (threshold of 2.5 degrees)
+        if distance <= 2.5:
+            if in_group:
+                point_groups[-1].append(point_b_idx)
+            else:
+                point_groups.append([point_a_idx])
+                point_groups[-1].append(point_b_idx)
+                in_group = True
+        else:
+            in_group = False
+
+    # Set position adjustments for grouped points
+    for group in point_groups:
+        if len(group) == 2:
+            position_adjustments[group[0]] = -1.5
+            position_adjustments[group[1]] = 1.5
+        elif len(group) == 3:
+            position_adjustments[group[0]] = -2.0
+            position_adjustments[group[1]] = 0.0
+            position_adjustments[group[2]] = 2.0
+        elif len(group) == 4:
+            position_adjustments[group[0]] = -3.0
+            position_adjustments[group[1]] = -1.0
+            position_adjustments[group[2]] = 1.0
+            position_adjustments[group[3]] = 3.0
+        elif len(group) >= 5:
+            # Spread evenly for larger groups
+            spread = 1.5
+            mid = (len(group) - 1) / 2
+            for i, idx in enumerate(group):
+                position_adjustments[idx] = (i - mid) * spread
+
+    # -----------------------------------------------------------
+    # 2. Draw degree indicators for each point
+    # -----------------------------------------------------------
+    zero_point = 360 - seventh_house_degree
+
+    for point_idx in range(len(points_settings)):
+        # Calculate the point offset angle
+        point_offset = zero_point + points_abs_positions[point_idx]
+        if point_offset > 360:
+            point_offset -= 360
+
+        # Draw radial line from outer edge through the point position
+        # Line extends from just inside first_circle to just outside third_circle
+        x1 = sliceToX(0, radius - first_circle_radius + 4, point_offset) + first_circle_radius - 4
+        y1 = sliceToY(0, radius - first_circle_radius + 4, point_offset) + first_circle_radius - 4
+        x2 = sliceToX(0, radius - first_circle_radius - 4, point_offset) + first_circle_radius + 4
+        y2 = sliceToY(0, radius - first_circle_radius - 4, point_offset) + first_circle_radius + 4
+
+        point_color = points_settings[point_idx]["color"]
+        output += f'<line class="planet-degree-line" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+        output += f'style="stroke: {point_color}; stroke-width: 1px; stroke-opacity:.8;"/>'
+
+        # Draw rotated degree text
+        rotation = first_house_degree - points_abs_positions[point_idx]
+        text_anchor = "end"
+
+        # Normalize rotation to [-180, 180] range
+        while rotation > 180:
+            rotation -= 360
+        while rotation < -180:
+            rotation += 360
+
+        # Adjust text rotation and anchor for readability
+        # Flip text by 180° when on left side of chart so it reads correctly
+        if rotation < -90 or rotation > 90:
+            rotation += 180 if rotation < 0 else -180
+            text_anchor = "start"
+
+        # Position the degree text just outside the first circle
+        # Apply position adjustment to prevent overlapping
+        x_offset = 1 if text_anchor == "end" else -1
+        adjusted_point_offset = point_offset + position_adjustments[point_idx]
+        text_radius = first_circle_radius - 5.0
+
+        deg_x = sliceToX(0, radius - text_radius, adjusted_point_offset + x_offset) + text_radius
+        deg_y = sliceToY(0, radius - text_radius, adjusted_point_offset + x_offset) + text_radius
+
+        # Format and output the degree text
+        degree_text = convert_decimal_to_degree_string(points_rel_positions[point_idx], format_type="1")
+        output += f'<g transform="translate({deg_x},{deg_y})">'
+        output += f'<text transform="rotate({rotation})" text-anchor="{text_anchor}" '
+        output += f'style="fill: {point_color}; font-size: 10px;">{degree_text}</text></g>'
+
+    return output
+
+
+def _draw_inner_point_indicators(
+    output: str,
+    radius: Union[int, float],
+    third_circle_radius: Union[int, float],
+    first_house_degree: Union[int, float],
+    seventh_house_degree: Union[int, float],
+    points_abs_positions: list[Union[int, float]],
+    points_rel_positions: list[Union[int, float]],
+    points_settings: list[KerykeionSettingsCelestialPointModel],
+) -> str:
+    """
+    Draw degree indicators (radial line + rotated degree text) for inner/natal celestial points
+    in dual-subject charts (Transit, Synastry, DualReturnChart).
+
+    The indicators are positioned on the third circle (inner planet ring boundary).
+
+    Args:
+        output (str): Current SVG output to append to.
+        radius (Union[int, float]): Chart radius.
+        third_circle_radius (Union[int, float]): Radius of the third circle (inner boundary).
+        first_house_degree (Union[int, float]): Degree of the first house.
+        seventh_house_degree (Union[int, float]): Degree of the seventh house.
+        points_abs_positions (list[Union[int, float]]): Absolute positions of points.
+        points_rel_positions (list[Union[int, float]]): Relative positions of points (within sign).
+        points_settings (list[KerykeionSettingsCelestialPointModel]): Settings for points.
+
+    Returns:
+        str: Updated SVG output with added degree indicators.
+    """
+    # -----------------------------------------------------------
+    # 1. Calculate position adjustments for close points
+    # -----------------------------------------------------------
+    position_adjustments: dict[int, float] = {i: 0.0 for i in range(len(points_settings))}
+
+    # Map absolute position to point index
+    position_index_map = {}
+    for i in range(len(points_settings)):
+        position_index_map[points_abs_positions[i]] = i
+
+    # Sort positions
+    sorted_positions = sorted(position_index_map.keys())
+
+    # Find groups of points that are close to each other
+    point_groups: List[List[int]] = []
+    in_group = False
+
+    for pos_idx, abs_position in enumerate(sorted_positions):
+        point_a_idx = position_index_map[abs_position]
+
+        # Get next point
+        if pos_idx == len(sorted_positions) - 1:
+            point_b_idx = position_index_map[sorted_positions[0]]
+        else:
+            point_b_idx = position_index_map[sorted_positions[pos_idx + 1]]
+
+        # Check distance between points
+        position_a = points_abs_positions[point_a_idx]
+        position_b = points_abs_positions[point_b_idx]
+        distance = degreeDiff(position_a, position_b)
+
+        # Group points that are close (threshold of 2.5 degrees)
+        if distance <= 2.5:
+            if in_group:
+                point_groups[-1].append(point_b_idx)
+            else:
+                point_groups.append([point_a_idx])
+                point_groups[-1].append(point_b_idx)
+                in_group = True
+        else:
+            in_group = False
+
+    # Set position adjustments for grouped points
+    for group in point_groups:
+        if len(group) == 2:
+            position_adjustments[group[0]] = -1.5
+            position_adjustments[group[1]] = 1.5
+        elif len(group) == 3:
+            position_adjustments[group[0]] = -2.0
+            position_adjustments[group[1]] = 0.0
+            position_adjustments[group[2]] = 2.0
+        elif len(group) == 4:
+            position_adjustments[group[0]] = -3.0
+            position_adjustments[group[1]] = -1.0
+            position_adjustments[group[2]] = 1.0
+            position_adjustments[group[3]] = 3.0
+        elif len(group) >= 5:
+            # Spread evenly for larger groups
+            spread = 1.5
+            mid = (len(group) - 1) / 2
+            for i, idx in enumerate(group):
+                position_adjustments[idx] = (i - mid) * spread
+
+    # -----------------------------------------------------------
+    # 2. Draw degree indicators for each point (inner circle)
+    # -----------------------------------------------------------
+    zero_point = 360 - seventh_house_degree
+
+    for point_idx in range(len(points_settings)):
+        # Calculate the point offset angle
+        point_offset = zero_point + points_abs_positions[point_idx]
+        if point_offset > 360:
+            point_offset -= 360
+
+        # Draw radial line at the boundary between natal planets and zodiac signs
+        # This is at offset 72 (Radius 168)
+        natal_indicator_offset = 72
+        x1 = sliceToX(0, radius - natal_indicator_offset + 4, point_offset) + natal_indicator_offset - 4
+        y1 = sliceToY(0, radius - natal_indicator_offset + 4, point_offset) + natal_indicator_offset - 4
+        x2 = sliceToX(0, radius - natal_indicator_offset - 4, point_offset) + natal_indicator_offset + 4
+        y2 = sliceToY(0, radius - natal_indicator_offset - 4, point_offset) + natal_indicator_offset + 4
+
+        point_color = points_settings[point_idx]["color"]
+        output += f'<line class="planet-degree-line-inner" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+        output += f'style="stroke: {point_color}; stroke-width: 1px; stroke-opacity:.8;"/>'
+
+        # Draw rotated degree text
+        rotation = first_house_degree - points_abs_positions[point_idx]
+        text_anchor = "start"  # Inner text starts from the inside
+
+        # Normalize rotation to [-180, 180] range
+        while rotation > 180:
+            rotation -= 360
+        while rotation < -180:
+            rotation += 360
+
+        # Adjust text rotation and anchor for readability
+        # Flip text by 180° when on left side of chart so it reads correctly
+        if rotation < -90 or rotation > 90:
+            rotation += 180 if rotation < 0 else -180
+            text_anchor = "end"
+
+        # Position the degree text just inside the line (toward center)
+        # Apply position adjustment to prevent overlapping
+        adjusted_point_offset = point_offset + position_adjustments[point_idx]
+        text_radius = natal_indicator_offset + 5.0
+
+        deg_x = sliceToX(0, radius - text_radius, adjusted_point_offset) + text_radius
+        deg_y = sliceToY(0, radius - text_radius, adjusted_point_offset) + text_radius
+
+        # Format and output the degree text
+        degree_text = convert_decimal_to_degree_string(points_rel_positions[point_idx], format_type="1")
+        output += f'<g transform="translate({deg_x},{deg_y})">'
+        output += f'<text transform="rotate({rotation})" text-anchor="{text_anchor}" '
+        output += f'style="fill: {point_color}; font-size: 8px; dominant-baseline: middle;">{degree_text}</text></g>'
+
+    return output
 
 def _draw_secondary_points(
     output: str,
@@ -597,12 +923,16 @@ def _draw_secondary_points(
         rotation = first_house_degree - points_abs_positions[point_idx]
         text_anchor = "end"
 
+        # Normalize rotation to [-180, 180] range
+        while rotation > 180:
+            rotation -= 360
+        while rotation < -180:
+            rotation += 360
+
         # Adjust text rotation and anchor for readability
-        if -90 > rotation > -270:
-            rotation += 180.0
-            text_anchor = "start"
-        if 270 > rotation > 90:
-            rotation -= 180.0
+        # Flip text by 180° when on left side of chart so it reads correctly
+        if rotation < -90 or rotation > 90:
+            rotation += 180 if rotation < 0 else -180
             text_anchor = "start"
 
         # Position the degree text
@@ -621,11 +951,7 @@ def _draw_secondary_points(
 
     # Draw connecting lines for the main point
     dropin = 0
-    if chart_type == "Transit":
-        dropin = 36
-    elif chart_type == "Synastry":
-        dropin = 36
-    elif chart_type == "Return":
+    if chart_type in ("Transit", "Synastry", "Return", "DualReturnChart"):
         dropin = 36
 
     # First connecting line segment
@@ -640,11 +966,7 @@ def _draw_secondary_points(
 
     # Second connecting line segment
     dropin = 120
-    if chart_type == "Transit":
-        dropin = 160
-    elif chart_type == "Synastry":
-        dropin = 160
-    elif chart_type == "Return":
+    if chart_type in ("Transit", "Synastry", "Return", "DualReturnChart"):
         dropin = 160
 
     x1 = sliceToX(0, radius - dropin, main_offset) + dropin
